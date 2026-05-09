@@ -13,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId; // 👈 IMPORTANTE: Añadimos ZoneId
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -37,6 +38,9 @@ public class OperacionesController {
     @Autowired
     private HistorialEstadoRepository historialRepository;
 
+    // Definimos la zona horaria de Perú de forma global para no repetirla
+    private final ZoneId zonaPeru = ZoneId.of("America/Lima");
+
     @PostMapping("/checkin")
     public ResponseEntity<?> confirmarCheckIn(@RequestBody CheckInDTO payload) {
         try {
@@ -60,16 +64,20 @@ public class OperacionesController {
             nuevaOp.setHabitacion(habitacion);
             nuevaOp.setHuesped(huespedFinal);
             nuevaOp.setAdelanto(payload.getAdelanto() != null ? payload.getAdelanto() : 0.0);
-            nuevaOp.setFechaIngreso(LocalDateTime.now());
+
+            // 🚨 CORRECCIÓN: Usamos la zona horaria de Perú
+            nuevaOp.setFechaIngreso(LocalDateTime.now(zonaPeru));
             nuevaOp.setEstado("ACTIVO");
             operacionRepository.save(nuevaOp);
 
-            // 🚨 4. GUARDAMOS EL HISTORIAL PARA EL DASHBOARD
+            // 4. GUARDAMOS EL HISTORIAL PARA EL DASHBOARD
             HistorialEstado historial = new HistorialEstado();
             historial.setHabitacionId(habitacion.getId());
             historial.setEstadoAnterior("DISPONIBLE");
             historial.setEstadoNuevo("OCUPADO");
-            historial.setFechaHora(LocalDateTime.now());
+
+            // 🚨 CORRECCIÓN: Usamos la zona horaria de Perú
+            historial.setFechaHora(LocalDateTime.now(zonaPeru));
             historial.setUsuarioEncargado("Recepcionista"); // Placeholder
             historialRepository.save(historial);
 
@@ -116,8 +124,11 @@ public class OperacionesController {
                         .body("No se encontró ningún Check-In activo.");
             }
 
-            LocalDateTime ahora = LocalDateTime.now();
+            // 🚨 CORRECCIÓN: El cálculo de salida también debe usar la hora de Perú
+            LocalDateTime ahora = LocalDateTime.now(zonaPeru);
+
             long horasTranscurridas = java.time.Duration.between(opActiva.getFechaIngreso(), ahora).toHours();
+            // Cobramos mínimo 1 hora aunque salga a los 5 minutos
             if (horasTranscurridas == 0) horasTranscurridas = 1;
 
             double total = calcularPrecio(hab, horasTranscurridas);
@@ -158,6 +169,21 @@ public class OperacionesController {
         Double monto = Double.valueOf(payload.get("total").toString());
         String medioPago = (String) payload.get("metodoPago");
         String tiempoEstadia = (String) payload.get("tiempoUso");
+
+        // 🚨 LA SOLUCIÓN: Buscamos la operación que estaba ACTIVA y la cerramos.
+        Operacion opActiva = operacionRepository.findAll().stream()
+                .filter(o -> o.getHabitacion() != null &&
+                        o.getHabitacion().getId().equals(habitacionId) &&
+                        "ACTIVO".equals(o.getEstado()))
+                .findFirst()
+                .orElse(null);
+
+        if (opActiva != null) {
+            opActiva.setEstado("FINALIZADO"); // La marcamos como cerrada
+            operacionRepository.save(opActiva); // Actualizamos la base de datos
+        }
+
+        // Finalmente, liberamos la habitación y guardamos la venta
         return habitacionService.realizarCheckOut(habitacionId, monto, medioPago, tiempoEstadia);
     }
 }
