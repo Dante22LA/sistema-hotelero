@@ -61,4 +61,13 @@ export class Portal implements OnInit {
     localStorage.clear(); // Borra todo (token, nombre, hoteles)
     this.router.navigate(['/login']);
   }
+
+  irADashboard() {
+    console.log('🚀 Navegando al Panel de Control...');
+    this.router.navigate(['/dashboard']);
+  }
+
+  irAPerfil() {
+    this.router.navigate(['/perfil']);
+  }
 }

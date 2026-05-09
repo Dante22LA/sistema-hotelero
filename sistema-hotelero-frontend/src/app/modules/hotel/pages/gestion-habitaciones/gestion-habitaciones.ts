@@ -1,7 +1,7 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Router } from '@angular/router';
 
 @Component({
@@ -12,13 +12,17 @@ import { Router } from '@angular/router';
   styleUrls: ['./gestion-habitaciones.css'],
 })
 export class GestionHabitacionesComponent implements OnInit {
-  // --- PROPIEDADES ---
+  // --- PROPIEDADES DE VISUALIZACIÓN (Las que faltaban) ---
+  nombreUsuario: string = '';
+  nombreHotel: string = '';
+
+  // --- PROPIEDADES OPERATIVAS ---
   habitaciones: any[] = [];
   pisosDisponibles = [1, 2, 3, 4, 5];
   idHotel: number = 0;
 
   filtroSeleccionado: string = 'TODOS';
-  habSeleccionada: any = null; // Para el Modal de detalles
+  habSeleccionada: any = null;
 
   nuevaHabitacion: any = {
     piso: 1,
@@ -32,56 +36,51 @@ export class GestionHabitacionesComponent implements OnInit {
     precio12Horas: 0,
     precio24Horas: 0,
     precioHoraExtra: 0,
-    hotelId: 0, // Se llenará en el ngOnInit
+    hotelId: 0,
   };
 
   constructor(
     private http: HttpClient,
     private cdr: ChangeDetectorRef,
-    private router: Router,
+    public router: Router, // 🚨 Cambiado a PUBLIC para que el HTML pueda usar router.navigate
   ) {}
 
   ngOnInit() {
-    // 1. Obtenemos el ID del hotel seleccionado del localStorage
+    // 1. Cargamos datos para el Header y Sidebar
+    this.nombreUsuario = localStorage.getItem('nombre') || 'Admin';
+    this.nombreHotel = localStorage.getItem('hotelNombre') || 'Sede';
+
+    // 2. Obtenemos el ID del hotel seleccionado
     const storedId = localStorage.getItem('hotelId');
 
     if (storedId) {
       this.idHotel = Number(storedId);
-      // 2. Seteamos el ID en el objeto de creación para que no se pierda
       this.nuevaHabitacion.hotelId = this.idHotel;
-      // 3. Cargamos los datos filtrados
       this.listarHabitaciones();
     } else {
-      // Si no hay hotelId, lo mandamos a la pantalla de selección por seguridad
       console.warn('⚠️ No se detectó hotel activo, redirigiendo...');
-      this.router.navigate(['/seleccion']);
+      this.router.navigate(['/seleccion-hotel']);
     }
   }
 
   // --- LÓGICA DE DATOS ---
 
   listarHabitaciones() {
-    // Usamos el endpoint específico de hotel para traer solo lo que pertenece a esta sede
     this.http.get<any[]>(`http://localhost:8080/api/habitaciones/hotel/${this.idHotel}`).subscribe({
       next: (data) => {
         this.habitaciones = data;
-        console.log(`✅ ${data.length} habitaciones cargadas para el hotel ${this.idHotel}`);
-        this.cdr.detectChanges(); // Forzamos a Angular a pintar los cambios
+        this.cdr.detectChanges();
       },
-      error: (err) => {
-        console.error('❌ Error al listar habitaciones:', err);
-      },
+      error: (err) => console.error('❌ Error al listar habitaciones:', err),
     });
   }
 
   guardarHabitacion() {
-    // Aseguramos que el hotelId esté presente antes de enviar el POST
     this.nuevaHabitacion.hotelId = this.idHotel;
-
     this.http.post('http://localhost:8080/api/habitaciones', this.nuevaHabitacion).subscribe({
       next: () => {
-        alert('Habitación guardada exitosamente en esta sede.');
-        this.listarHabitaciones(); // Refrescamos la lista
+        alert('✅ Habitación guardada exitosamente.');
+        this.listarHabitaciones();
         this.limpiarFormulario();
       },
       error: (err) => alert('Error al guardar: ' + err.message),
@@ -116,7 +115,7 @@ export class GestionHabitacionesComponent implements OnInit {
 
   limpiarFormulario() {
     this.nuevaHabitacion = {
-      ...this.nuevaHabitacion, // Mantenemos el hotelId y el piso actual
+      ...this.nuevaHabitacion,
       numero: '',
       descripcion: '',
       precioMinimo: 0,
@@ -126,7 +125,64 @@ export class GestionHabitacionesComponent implements OnInit {
     };
   }
 
+  // --- NAVEGACIÓN Y SESIÓN (Para que el Sidebar funcione) ---
+
   irACheckIn(idHabitacion: number) {
     this.router.navigate(['/checkin', idHabitacion]);
+  }
+
+  irACheckOut(idHabitacion: number) {
+    this.cerrarDetalle();
+    this.router.navigate(['/checkout', idHabitacion]);
+  }
+
+  cambiarSede() {
+    this.router.navigate(['/seleccion-hotel']);
+  }
+
+  cerrarSesion() {
+    localStorage.clear();
+    this.router.navigate(['/login']);
+  }
+
+  // --- OPERACIONES DE ESTADO ---
+
+  eliminarHabitacion(id: number) {
+    const confirmar = confirm('¿Estás seguro de eliminar esta habitación?');
+    if (confirmar) {
+      const token = localStorage.getItem('token');
+      const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
+
+      this.http
+        .delete(`http://localhost:8080/api/habitaciones/${id}`, { headers, responseType: 'text' })
+        .subscribe({
+          next: () => {
+            alert('✅ Habitación eliminada.');
+            this.cerrarDetalle();
+            this.listarHabitaciones();
+          },
+          error: (err) =>
+            alert('❌ No se pudo eliminar. Es posible que tenga historial vinculado.'),
+        });
+    }
+  }
+
+  cambiarEstado(idHabitacion: number, nuevoEstado: string) {
+    const token = localStorage.getItem('token');
+    const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
+
+    this.http
+      .post(
+        `http://localhost:8080/api/habitaciones/${idHabitacion}/estado`,
+        { estado: nuevoEstado },
+        { headers, responseType: 'text' },
+      )
+      .subscribe({
+        next: () => {
+          this.cerrarDetalle();
+          this.listarHabitaciones();
+        },
+        error: (err) => alert('❌ Error al actualizar estado.'),
+      });
   }
 }

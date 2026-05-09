@@ -35,6 +35,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/hoteles/**").permitAll() // Para pruebas, luego ponlo en authenticated
                         .requestMatchers("/api/habitaciones/**").permitAll()
+                        .requestMatchers("/api/operaciones/**").authenticated()
+                        .requestMatchers("/api/historial/**").authenticated()
+                        .requestMatchers("/api/habitaciones/**").authenticated()
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider)

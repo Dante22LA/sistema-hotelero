@@ -13,9 +13,15 @@ public class HistorialController {
     @Autowired
     private HistorialEstadoRepository historialRepository;
 
-    // Este endpoint devolverá toda la bitácora de una habitación específica
-    @GetMapping("/{habitacionId}")
-    public List<HistorialEstado> obtenerHistorialPorHabitacion(@PathVariable Integer habitacionId) {
+    // Dashboard: Trae todo el historial de la sede (Hotel)
+    @GetMapping("/hotel/{hotelId}")
+    public List<HistorialEstado> obtenerPorHotel(@PathVariable Long hotelId) {
+        return historialRepository.findByHotelId(hotelId);
+    }
+
+    // Opcional: Trae el historial de una habitación específica
+    @GetMapping("/habitacion/{habitacionId}")
+    public List<HistorialEstado> obtenerPorHabitacion(@PathVariable Long habitacionId) {
         return historialRepository.findByHabitacionIdOrderByFechaHoraDesc(habitacionId);
     }
 }
