@@ -25,4 +25,4 @@ Antes de levantar el backend, necesitas preparar la base de datos:
 1. Abre tu gestor de base de datos (Ej. MySQL Workbench, DBeaver, phpMyAdmin).
 2. Crea una nueva base de datos vacía. Por ejemplo:
    ```sql
-   CREATE DATABASE hotel_db;
+   CREATE DATABASE db_hotel;
